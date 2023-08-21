@@ -12,7 +12,7 @@ The MACAU Python package takes pre-fitted LightGBM classifiers/regressors as inp
 - Epistemic Uncertainty: Supplies 1-sigma confidence intervals based on the epistemic uncertainty of the predicted sample.
 - Uncertainty: Encompasses both aleatoric and epistemic uncertainty, providing a comprehensive measure.
 
-## Usage
+## Install
 <pre>
 pip install .
 </pre>
