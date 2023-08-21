@@ -13,6 +13,10 @@ The MACAU Python package takes pre-fitted LightGBM classifiers/regressors as inp
 - Uncertainty: Encompasses both aleatoric and epistemic uncertainty, providing a comprehensive measure.
 
 ## Usage
+<pre>
+pip install .
+</pre>
+## Usage
 
 ### Regression
 <pre>
