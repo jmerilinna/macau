@@ -14,7 +14,8 @@ The MACAU Python package takes pre-fitted LightGBM classifiers/regressors as inp
 
 ## Install
 <pre>
-pip install .
+git clone https://github.com/jmerilinna/macau.git
+pip install ./macau
 </pre>
 ## Usage
 
