@@ -109,7 +109,7 @@ class OASImpl(OAS):
         Returns:
         - Transformed data.
         """
-        return self.mahalanobis(X).reshape(-1, 1)
+        return self.mahalanobis(X).reshape(-1, 1)**0.5
         
 class LedoitWolfImpl(LedoitWolf):
     """
@@ -134,7 +134,7 @@ class LedoitWolfImpl(LedoitWolf):
         Returns:
         - Transformed data.
         """
-        return self.mahalanobis(X).reshape(-1, 1)
+        return self.mahalanobis(X).reshape(-1, 1)**0.5
 
 
 class MinCovDetImpl(MinCovDet):
@@ -160,7 +160,7 @@ class MinCovDetImpl(MinCovDet):
         Returns:
         - Transformed data.
         """
-        return self.mahalanobis(X).reshape(-1, 1)
+        return self.mahalanobis(X).reshape(-1, 1)**0.5
 
 class EllipticEnvelopeImpl(EllipticEnvelope):
     """
@@ -185,7 +185,7 @@ class EllipticEnvelopeImpl(EllipticEnvelope):
         Returns:
         - Transformed data.
         """
-        return self.mahalanobis(X).reshape(-1, 1)
+        return self.mahalanobis(X).reshape(-1, 1)**0.5
         
 class NoveltyDetector:
     """
