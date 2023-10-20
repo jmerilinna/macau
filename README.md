@@ -5,9 +5,9 @@ The MACAU Python package takes pre-fitted LightGBM classifiers/regressors as inp
 - Inference Novelty: Indicates how unusual the predicted value is, expressed as a z-score.
 - Novelty: Measures the uniqueness of the features in the predicted sample within its local context, represented as a z-score.
 - Conditional Novelty: Assesses the oddness of the predicted sample's features in its local context, considering only the used features and expressed as a z score.
-- Inference Novelty Uncertainty: Represents the standard deviation of the inference novelty.
-- Novelty Uncertainty: Reflects the standard deviation of novelty.
-- Conditional Novelty Uncertainty: Signifies the standard deviation of conditional novelty.
+- Inference Novelty: Represents the standard deviation of the inference novelty.
+- Novelty: Reflects the standard deviation of novelty.
+- Conditional Novelty: Signifies the standard deviation of conditional novelty.
 - Aleatoric Uncertainty: Provides 1-sigma confidence intervals based on the aleatoric uncertainty of the predicted sample.
 - Epistemic Uncertainty: Supplies 1-sigma confidence intervals based on the epistemic uncertainty of the predicted sample.
 - Uncertainty: Encompasses both aleatoric and epistemic uncertainty, providing a comprehensive measure.
