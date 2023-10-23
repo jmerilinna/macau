@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name='macau',
     version='0.99.0',
-    license='MIT',
+    license='GNU GENERAL PUBLIC LICENSE Version 3',
     description='Uncertainty and Novelty Modelling for LightGBM',
     author='Janne Merilinna',
     author_email='jmerilinna@gmail.com',
