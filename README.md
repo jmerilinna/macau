@@ -3,8 +3,8 @@ The MACAU Python package takes pre-fitted LightGBM classifiers/regressors as inp
 
 - Prediction: The predicted probability or regressed value.
 - Inference Novelty: Indicates how unusual the predicted value is, expressed as a z-score.
-- Novelty: Measures the uniqueness of the features in the predicted sample within its local context, represented as a z-score.
-- Conditional Novelty: Assesses the oddness of the predicted sample's features in its local context, considering only the used features and expressed as a z score.
+- Novelty: Measures the uniqueness of the features in the predicted sample within its local context, represented as a probability being unique.
+- Conditional Novelty: Assesses the oddness of the predicted sample's features in its local context, considering only the used features and expressed as probability.
 - Inference Novelty uncertainty: Represents the standard deviation of the inference novelty.
 - Novelty uncertainty: Reflects the standard deviation of novelty.
 - Conditional Novelty uncertainty: Signifies the standard deviation of conditional novelty.
