@@ -11,9 +11,21 @@ import lightgbm
 from macau.model.linear_model import DummyClassifierCI, DummyRegressorCI, DeltaLogisticRegression
 from macau.novelty.noveltydetector import NoveltyDetector, InferenceNoveltyDetector
 
+import numpy as np
+import scipy
+from scipy.linalg import norm
+import copy
+from sklearn.covariance import LedoitWolf, MinCovDet, EllipticEnvelope, OAS
+from sklearn.preprocessing import RobustScaler, QuantileTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.decomposition import PCA
+from sklearn.pipeline import make_pipeline
+
+from macau.model.linear_model import DummyClassifierImpl
+
+    
 class MACAU:
     def __init__(self, model,
-                 leafwise_normalization = False,
                  linear_tree = True):
         """
         Conducts tree inspection of LightGBMClassifier and LightGBMRegressor to fit multiple models to the leaves of the trees to enable uncertainty modelling.
@@ -50,7 +62,6 @@ class MACAU:
         self._model = model
         self._estimators = []
 
-        self._leafwise_normalization = leafwise_normalization
         self._linear_tree = linear_tree
         self._classes = [0]
         
@@ -93,8 +104,6 @@ class MACAU:
 
     def _fit_regression_estimators(self, X, Y, leaves, tree, estimator_idx):
         estimators = {}  # Dictionary to store the fitted estimators for each unique leaf
-        predicted_novelties = []  # List to collect predicted novelties
-        predicted_conditional_novelties = []  # List to collect predicted conditional novelties
         
         # Iterate over unique leaves in the provided 'leaves' array
         for unique_leaf in np.unique(leaves, axis=0):
@@ -117,21 +126,12 @@ class MACAU:
             estimators[unique_leaf]['active_features'] = feats  # Store the active features for the leaf
     
             # Fit the novelty estimators for the current leaf
-            estimators[unique_leaf]['novelty_estimator'] = NoveltyDetector(normalize = self._leafwise_normalization).fit(selected_X, selected_Y)
+            estimators[unique_leaf]['novelty_estimator'] = NoveltyDetector().fit(selected_X, selected_Y)
             if len(feats) == selected_X.shape[1]:
                 estimators[unique_leaf]['conditional_novelty_estimator'] = estimators[unique_leaf]['novelty_estimator']
             else:
-                estimators[unique_leaf]['conditional_novelty_estimator'] = NoveltyDetector(normalize = self._leafwise_normalization).fit(selected_X[:, feats], selected_Y)
+                estimators[unique_leaf]['conditional_novelty_estimator'] = NoveltyDetector().fit(selected_X[:, feats], selected_Y)
             
-            if not self._leafwise_normalization:
-                # If leaf-wise normalization is disabled, collect the predicted novelties directly
-                novelties = list(estimators[unique_leaf]['novelty_estimator'].transform(selected_X).ravel())
-                predicted_novelties.extend(novelties)
-                if len(feats) == selected_X.shape[1]:
-                    predicted_conditional_novelties.extend(novelties)
-                else:
-                    predicted_conditional_novelties.extend(list(estimators[unique_leaf]['conditional_novelty_estimator'].transform(selected_X[:, feats]).ravel()))
-                
             # Fit the uncertainty estimator for the leaf
             if not self._linear_tree:
                 # If linear tree is disabled, fit a DummyRegressorCI to estimate uncertainties
@@ -140,18 +140,7 @@ class MACAU:
             else:
                 estimators[unique_leaf]['inference_novelty_estimator'] = InferenceNoveltyDetector(ARDRegression(), normalize = True).fit(selected_X[:, feats], selected_Y)
                 estimators[unique_leaf]['uncertainty_estimator'] = estimators[unique_leaf]['inference_novelty_estimator']
-                
-        if not self._leafwise_normalization and predicted_novelties:
-            # If leaf-wise normalization is disabled and there are predicted novelties, fit scalers for the novelties
-            novelty_scaler = QuantileTransformer(output_distribution='normal', n_quantiles=min(1000, len(predicted_novelties))).fit(np.array(predicted_novelties).reshape(-1, 1))            
-            if len(feats) == selected_X.shape[1]:
-                conditional_novelty_scaler = novelty_scaler
-            else:
-                conditional_novelty_scaler = QuantileTransformer(output_distribution='normal', n_quantiles=min(1000, len(predicted_conditional_novelties))).fit(np.array(predicted_conditional_novelties).reshape(-1, 1))
-            
-            for leaf in estimators.values():
-                leaf['novelty_estimator'] = make_pipeline(leaf['novelty_estimator'], novelty_scaler)
-                leaf['conditional_novelty_estimator'] = make_pipeline(leaf['conditional_novelty_estimator'], conditional_novelty_scaler)
+
         return estimators
 
     def _fit_classifier_estimators(self, X, Y, leaves, tree, estimator_idx):
@@ -166,8 +155,6 @@ class MACAU:
     
         # Initialize dictionary to store estimators for each leaf
         estimators = {}
-        predicted_novelties = []
-        predicted_conditional_novelties = []
         
         # Iterate over unique leaves
         for unique_leaf in np.unique(leaves, axis=0):
@@ -195,22 +182,12 @@ class MACAU:
             estimators[unique_leaf]['active_features'] = feats
     
             # Fit novelty detectors for conditional and unconditional novelties
-            estimators[unique_leaf]['novelty_estimator'] = NoveltyDetector(normalize = self._leafwise_normalization).fit(selected_X, selected_Y)
+            estimators[unique_leaf]['novelty_estimator'] = NoveltyDetector().fit(selected_X, selected_Y)
             if len(feats) == selected_X.shape[1]:
                 estimators[unique_leaf]['conditional_novelty_estimator'] = estimators[unique_leaf]['novelty_estimator']
             else:
-                estimators[unique_leaf]['conditional_novelty_estimator'] = NoveltyDetector(normalize = self._leafwise_normalization).fit(selected_X[:, feats], selected_Y)
+                estimators[unique_leaf]['conditional_novelty_estimator'] = NoveltyDetector().fit(selected_X[:, feats], selected_Y)
             
-            # Perform leaf-wise normalization if enabled
-            if not self._leafwise_normalization:
-                # Collect predicted novelties for novelty estimation
-                novelties = list(estimators[unique_leaf]['novelty_estimator'].transform(selected_X).ravel())
-                predicted_novelties.extend(novelties)
-                if len(feats) == selected_X.shape[1]:
-                    predicted_conditional_novelties.extend(novelties)
-                else:
-                    predicted_conditional_novelties.extend(list(estimators[unique_leaf]['conditional_novelty_estimator'].transform(selected_X[:, feats]).ravel()))                
-                
             # Determine the uncertainty estimator based on the linear tree option
             if not self._linear_tree:
                 # Use a constant dummy classifier as the uncertainty estimator
@@ -220,18 +197,6 @@ class MACAU:
                 estimators[unique_leaf]['inference_novelty_estimator'] = InferenceNoveltyDetector(DeltaLogisticRegression(), normalize = True).fit(selected_X[:, feats], (selected_Y == estimator_label).astype(int))
             estimators[unique_leaf]['uncertainty_estimator'] = estimators[unique_leaf]['inference_novelty_estimator']
                 
-        # Perform additional normalization if leaf-wise normalization is disabled and there are predicted novelties
-        if not self._leafwise_normalization and predicted_novelties:        
-            novelty_scaler = QuantileTransformer(output_distribution='normal', n_quantiles=min(1000, len(predicted_novelties))).fit(np.array(predicted_novelties).reshape(-1, 1))
-            if len(feats) == selected_X.shape[1]:
-                conditional_novelty_scaler = novelty_scaler
-            else:
-                conditional_novelty_scaler = QuantileTransformer(output_distribution='normal', n_quantiles=min(1000, len(predicted_conditional_novelties))).fit(np.array(predicted_conditional_novelties).reshape(-1, 1))
-            
-            for leaf in estimators.values():                
-                leaf['novelty_estimator'] = make_pipeline(leaf['novelty_estimator'], novelty_scaler)
-                leaf['conditional_novelty_estimator'] = make_pipeline(leaf['conditional_novelty_estimator'], conditional_novelty_scaler)
-
         return estimators
 
     def _fit_estimators(self, X, Y, leaves, tree, estimator_idx):
