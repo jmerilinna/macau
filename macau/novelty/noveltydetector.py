@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 from scipy.linalg import norm
 import copy
 from sklearn.covariance import LedoitWolf, MinCovDet, EllipticEnvelope, OAS
@@ -109,84 +110,8 @@ class OASImpl(OAS):
         Returns:
         - Transformed data.
         """
-        return self.mahalanobis(X).reshape(-1, 1)**0.5
-        
-class LedoitWolfImpl(LedoitWolf):
-    """
-    Wrapper class for LedoitWolf from sklearn.covariance.
-
-    This class inherits from LedoitWolf and adds the transform method.
-
-    Methods:
-    - transform(X): Apply the Mahalanobis distance transformation to the data.
-    """
-
-    def __init__(self, **args):
-        super().__init__(**args)
-    
-    def transform(self, X):
-        """
-        Apply the Mahalanobis distance transformation to the data.
-
-        Parameters:
-        - X: Data to be transformed.
-
-        Returns:
-        - Transformed data.
-        """
-        return self.mahalanobis(X).reshape(-1, 1)**0.5
-
-
-class MinCovDetImpl(MinCovDet):
-    """
-    Wrapper class for MinCovDet from sklearn.covariance.
-
-    This class inherits from MinCovDet and adds the transform method.
-
-    Methods:
-    - transform(X): Apply the Mahalanobis distance transformation to the data.
-    """
-
-    def __init__(self, **args):
-        super().__init__(**args)
-    
-    def transform(self, X):
-        """
-        Apply the Mahalanobis distance transformation to the data.
-
-        Parameters:
-        - X: Data to be transformed.
-
-        Returns:
-        - Transformed data.
-        """
-        return self.mahalanobis(X).reshape(-1, 1)**0.5
-
-class EllipticEnvelopeImpl(EllipticEnvelope):
-    """
-    Wrapper class for EllipticEnvelope from sklearn.covariance.
-
-    This class inherits from EllipticEnvelope and adds the transform method.
-
-    Methods:
-    - transform(X): Apply the Mahalanobis distance transformation to the data.
-    """
-
-    def __init__(self, **args):
-        super().__init__(**args)
-    
-    def transform(self, X):
-        """
-        Apply the Mahalanobis distance transformation to the data.
-
-        Parameters:
-        - X: Data to be transformed.
-
-        Returns:
-        - Transformed data.
-        """
-        return self.mahalanobis(X).reshape(-1, 1)**0.5
-        
+        return (scipy.stats.chi2.cdf(self.mahalanobis(X), X.shape[1])).reshape(-1, 1)
+                
 class NoveltyDetector:
     """
     Novelty detector based on OAS estimation.
