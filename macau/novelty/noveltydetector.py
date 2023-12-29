@@ -94,7 +94,7 @@ class OASImpl(OAS):
     This class inherits from OAS and adds the transform method.
 
     Methods:
-    - transform(X): Apply the Mahalanobis distance transformation to the data.
+    - transform(X): Apply the Mahalanobis distance transformation to the data and converts that to probabilities.
     """
 
     def __init__(self, **args):
