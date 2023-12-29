@@ -33,10 +33,6 @@ class MACAU:
         Parameters
         ----------
         model : Fitted Lightgbm model
-        leafwise_normalization : bool, optional
-            False: Tree-wise normalization of novelty.
-            True: Leaf-wise normalization of novelty.
-            (default is False)
         linear_tree : bool, optional
             True: Use piece-wise linear tree.
             False: Use leaf-wise mean for predictions.
