@@ -298,6 +298,35 @@ class MACAU:
         
         return [predictions, inference_novelty, novelty, conditional_novelty, uncertainty, n_samples]
 
+    def _explain(self, X, leaves, estimators):
+        novelty_contributions = np.zeros(X.shape)
+        conditional_novelty_contributions = np.zeros(X.shape)
+        for unique_leaf in np.unique(leaves):
+            matches = leaves == unique_leaf
+            
+            novelty_cov = estimators[unique_leaf]['novelty_estimator']._pipeline[-1]
+            novelty_fc = np.abs(np.dot(X[matches] - novelty_cov.location_, novelty_cov.precision_.T))
+            novelty_fc /= np.sum(novelty_fc, axis = 1).reshape(-1, 1)
+            novelty_contributions[np.nonzero(matches)[0]] = novelty_fc
+            
+            cnovelty_cov = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[-1]
+            cnovelty_fc = np.abs(np.dot(X[matches][:, estimators[unique_leaf]['active_features']] - cnovelty_cov.location_, cnovelty_cov.precision_.T))
+            cnovelty_fc /= np.sum(cnovelty_fc, axis = 1).reshape(-1, 1)
+            conditional_novelty_contributions[np.nonzero(matches)[0][:, np.newaxis], estimators[unique_leaf]['active_features']] = cnovelty_fc
+            
+        return novelty_contributions, conditional_novelty_contributions
+    
+    def _combine_explanations(self, result, n_classes):
+        # TODO: check that the sum of probas will be 1. Now they go unchecked.
+        if n_classes > 2:
+            class_result = []
+            for i in np.arange(len(macau._classes)):
+                class_result.append(result[np.arange(i, len(result), len(macau._classes))].mean(axis = 0))
+            return np.array(class_result)
+        else:
+            result = np.array(result).mean(axis = 0)
+            return np.array([(result[0] / result[0].sum(axis = 1).reshape(-1, 1)),
+                             (result[1] / result[1].sum(axis = 1).reshape(-1, 1))])
     
     def _combine_estimations(self, data, n_classes, n_samples):
         """
@@ -370,7 +399,65 @@ class MACAU:
     
             # Stack the computed results
             return np.vstack([means, inference_novelty_stds, novelty_stds, conditional_novelty_stds, aleatoric_uncertainty, epistemic_uncertainty, aleatoric_uncertainty + epistemic_uncertainty]).T
-
+        
+    def explain(self, X, n_jobs=1, verbose=0):
+        """
+        Explains feature contributions in pct of novelty and conditional novelty.
+    
+        Parameters:
+            X: Input samples to be explained.
+            n_jobs (int): Number of parallel jobs to run. Default is 1.
+            verbose (int): Verbosity level. Default is 0.
+    
+        Returns:
+            numpy.ndarray or list or pandas.DataFrame:
+                - If the input is a numpy array and the problem is regression or binary classification,
+                  it returns a numpy array of shape (2, n_samples, n_features) containing novelty and conditional novelty feature contributions.
+                - If the input is a pandas DataFrame and the problem is regression or binary classification,
+                  it returns a list [DataFrame(n_samples, n_features), DataFrame(n_samples, n_features)] containing novelty and conditional novelty feature contributions.
+                - If the input is a numpy array and the problem is multi-class classification,
+                  it returns a numpy array of shape (2, n_classes, n_samples, n_features) containing novelty and conditional novelty feature contributions
+                  for each class separately.
+                - If the input is a pandas DataFrame and the problem is multi-class classification,
+                  it returns a list (DataFrame(n_classes, n_samples, n_features), DataFrame(n_classes, n_samples, n_features))  containing novelty and conditional novelty feature contributions
+                  for each class separately.
+        """
+        
+        if verbose > 1:
+            verbose = 51
+    
+        if n_jobs <= 0:
+            n_jobs = os.cpu_count()
+    
+        leaves = self._model.predict(X, pred_leaf=True)
+        if len(leaves.shape) == 1:
+            leaves = leaves.reshape(-1, 1)
+    
+        jobs = (delayed(self._explain)(self._df_to_ndarray(X), leaves[:, estimator_idx], self._estimators[estimator_idx]) for estimator_idx in range(leaves.shape[1]))
+        result = Parallel(n_jobs = n_jobs, backend = 'threading', verbose=np.clip(verbose - 1, 0, 50))(jobs)
+        
+        result = self._combine_explanations(np.array(result), len(self._classes))
+        
+        if isinstance(X, pandas.DataFrame):
+            if len(result.shape) < 4:
+                return pandas.DataFrame(result[0], columns = X.columns, index = X.index), pandas.DataFrame(result[1], columns = X.columns, index = X.index)
+            else:
+                novelty_results = []
+                conditional_novelty_results = []
+                for i in np.arange(result.shape[0]):
+                    novelty_results.append(pandas.DataFrame(result[i][0], columns = X.columns, index = X.index))
+                    conditional_novelty_results.append(pandas.DataFrame(result[i][1], columns = X.columns, index = X.index))
+                return novelty_results, conditional_novelty_results
+        else:
+            if len(result.shape) < 4:
+                return result
+            else:
+                novelty_results = []
+                conditional_novelty_results = []
+                for i in np.arange(result.shape[0]):
+                    novelty_results.append(result[i][0])
+                    conditional_novelty_results.append(result[i][1])
+                return np.array([novelty_results, conditional_novelty_results])
     
     def predict(self, X, n_jobs=1, verbose=0):
         """
