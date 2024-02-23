@@ -325,8 +325,8 @@ class MACAU:
             return np.array(class_result)
         else:
             result = np.array(result).mean(axis = 0)
-            return np.array([(result[0] / result[0].sum(axis = 1).reshape(-1, 1)),
-                             (result[1] / result[1].sum(axis = 1).reshape(-1, 1))])
+            return np.array([np.nan_to_num(result[0] / result[0].sum(axis = 1).reshape(-1, 1)),
+                             np.nan_to_num(result[1] / result[1].sum(axis = 1).reshape(-1, 1))])
     
     def _combine_estimations(self, data, n_classes, n_samples):
         """
