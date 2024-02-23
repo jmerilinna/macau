@@ -307,12 +307,12 @@ class MACAU:
             novelty_cov = estimators[unique_leaf]['novelty_estimator']._pipeline[-1]
             novelty_fc = np.abs(np.dot(X[matches] - novelty_cov.location_, novelty_cov.precision_.T))
             novelty_fc /= np.sum(novelty_fc, axis = 1).reshape(-1, 1)
-            novelty_contributions[np.nonzero(matches)[0]] = novelty_fc
+            novelty_contributions[np.nonzero(matches)[0]] = np.nan_to_num(novelty_fc)
             
             cnovelty_cov = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[-1]
             cnovelty_fc = np.abs(np.dot(X[matches][:, estimators[unique_leaf]['active_features']] - cnovelty_cov.location_, cnovelty_cov.precision_.T))
             cnovelty_fc /= np.sum(cnovelty_fc, axis = 1).reshape(-1, 1)
-            conditional_novelty_contributions[np.nonzero(matches)[0][:, np.newaxis], estimators[unique_leaf]['active_features']] = cnovelty_fc
+            conditional_novelty_contributions[np.nonzero(matches)[0][:, np.newaxis], estimators[unique_leaf]['active_features']] = np.nan_to_num(cnovelty_fc)
             
         return novelty_contributions, conditional_novelty_contributions
     
