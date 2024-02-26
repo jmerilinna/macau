@@ -309,16 +309,15 @@ class MACAU:
             """
             x = estimators[unique_leaf]['novelty_estimator']._pipeline[1].transform(estimators[unique_leaf]['novelty_estimator']._pipeline[0].transform(X[matches]))
             novelty_cov = estimators[unique_leaf]['novelty_estimator']._pipeline[-1]
-            novelty_fc = np.abs((np.dot(x - novelty_cov.location_, novelty_cov.precision_.T))*(x - novelty_cov.location_))
-            novelty_fc /= np.sum(novelty_fc, axis = 1).reshape(-1, 1)
-            
+            novelty_fc = (np.dot(x - novelty_cov.location_, novelty_cov.precision_.T))*(x - novelty_cov.location_)
+            novelty_fc /= np.sum(np.abs(novelty_fc), axis = 1).reshape(-1, 1)
             novelty_contributions[np.nonzero(matches)[0]] = np.nan_to_num(novelty_fc)
             
             x = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[1].transform(estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[0].transform(X[matches][:, estimators[unique_leaf]['active_features']]))
             
             cnovelty_cov = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[-1]
-            cnovelty_fc = np.abs((np.dot(x - cnovelty_cov.location_, cnovelty_cov.precision_.T))*(x - cnovelty_cov.location_))
-            cnovelty_fc /= np.sum(cnovelty_fc, axis = 1).reshape(-1, 1)
+            cnovelty_fc = (np.dot(x - cnovelty_cov.location_, cnovelty_cov.precision_.T))*(x - cnovelty_cov.location_)
+            cnovelty_fc /= np.sum(np.abs(cnovelty_fc), axis = 1).reshape(-1, 1)
             conditional_novelty_contributions[np.nonzero(matches)[0][:, np.newaxis], estimators[unique_leaf]['active_features']] = np.nan_to_num(cnovelty_fc)
             
         return novelty_contributions, conditional_novelty_contributions
@@ -332,9 +331,9 @@ class MACAU:
             return np.array(class_result)
         else:
             result = np.array(result).mean(axis = 0)
-            return np.array([np.nan_to_num(result[0] / result[0].sum(axis = 1).reshape(-1, 1)),
-                             np.nan_to_num(result[1] / result[1].sum(axis = 1).reshape(-1, 1))])
-    
+            
+            return np.array([np.nan_to_num(result[0] / np.abs(result[0]).sum(axis = 1).reshape(-1, 1)),
+                             np.nan_to_num(result[1] / np.abs(result[1]).sum(axis = 1).reshape(-1, 1))])
     def _combine_estimations(self, data, n_classes, n_samples):
         """
         Combine the results from each tree into a single combined result.
