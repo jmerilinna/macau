@@ -1,6 +1,6 @@
 # Format expected by setup.py and doc/source/conf.py: string of form "X.Y.Z"
-_version_major = 0
-_version_minor = 99
+_version_major = 1
+_version_minor = 1
 _version_micro = ''  # use '' for first of series, number for 1 and above
 _version_extra = 'dev'
 #  _version_extra = ''  # Uncomment this for full releases
@@ -17,7 +17,7 @@ __version__ = '.'.join(map(str, _ver))
 CLASSIFIERS = ["Development Status :: 3 - Alpha",
                "Environment :: Console",
                "Intended Audience :: Science/Research",
-               "License :: OSI Approved :: MIT License",
+               "License :: OSI Approved :: GPL3",
                "Operating System :: OS Independent",
                "Programming Language :: Python",
                "Topic :: Scientific/Engineering"]
@@ -39,7 +39,7 @@ DESCRIPTION = description
 LONG_DESCRIPTION = long_description
 URL = "https://github.com/jmerilinna/macau"
 DOWNLOAD_URL = ""
-LICENSE = "MIT"
+LICENSE = "GPL3"
 AUTHOR = "Janne Merilinna"
 AUTHOR_EMAIL = "jmerilinna@gmail.com"
 PLATFORMS = "OS Independent"
