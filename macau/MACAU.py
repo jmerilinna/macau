@@ -312,13 +312,17 @@ class MACAU:
             novelty_cov = estimators[unique_leaf]['novelty_estimator']._pipeline[-1]
             
             novelty_fc = ShapleyCellDetector(novelty_cov).novelty_contributions(x)
-            novelty_fc /= np.sum(np.abs(novelty_fc), axis = 1).reshape(-1, 1)
+            probas = scipy.stats.chi2.cdf(np.sum(novelty_fc, axis = 1), df = novelty_fc.shape[1])
+            novelty_fc = novelty_fc / novelty_fc.sum(axis = 1).reshape(-1, 1)    
+            novelty_fc = probas.reshape(-1, 1) * novelty_fc
             novelty_contributions[np.nonzero(matches)[0]] = np.nan_to_num(novelty_fc)
             
             x = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[1].transform(estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[0].transform(X[matches][:, estimators[unique_leaf]['active_features']]))
             cnovelty_cov = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[-1]
             cnovelty_fc = ShapleyCellDetector(cnovelty_cov).novelty_contributions(x)
-            cnovelty_fc /= np.sum(np.abs(cnovelty_fc), axis = 1).reshape(-1, 1)
+            probas = scipy.stats.chi2.cdf(np.sum(cnovelty_fc, axis = 1), df = cnovelty_fc.shape[1])
+            cnovelty_fc = cnovelty_fc / cnovelty_fc.sum(axis = 1).reshape(-1, 1)    
+            cnovelty_fc = probas.reshape(-1, 1) * cnovelty_fc
             
             conditional_novelty_contributions[np.nonzero(matches)[0][:, np.newaxis], estimators[unique_leaf]['active_features']] = np.nan_to_num(cnovelty_fc)
             
@@ -336,29 +340,15 @@ class MACAU:
             x = estimators[unique_leaf]['novelty_estimator']._pipeline[1].transform(estimators[unique_leaf]['novelty_estimator']._pipeline[0].transform(X[matches]))
             novelty_cov = estimators[unique_leaf]['novelty_estimator']._pipeline[-1]
             novelty_fc = ShapleyCellDetector(novelty_cov).shapley_cell_detector(x, threshold = threshold)
-            #novelty_fc = (~np.isclose(novelty_fc, 0)).astype(float)
             novelty_contributions[np.nonzero(matches)[0]] = np.nan_to_num(novelty_fc)
             
             x = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[1].transform(estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[0].transform(X[matches][:, estimators[unique_leaf]['active_features']]))
             cnovelty_cov = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[-1]
             cnovelty_fc = ShapleyCellDetector(cnovelty_cov).shapley_cell_detector(x, threshold = threshold)
-            #cnovelty_fc = np.isclose(cnovelty_fc, 0).astype(float)
             conditional_novelty_contributions[np.nonzero(matches)[0][:, np.newaxis], estimators[unique_leaf]['active_features']] = np.nan_to_num(cnovelty_fc)
             
         return novelty_contributions, conditional_novelty_contributions
     
-    def _combine_novelty_shap_explanations(self, result, n_classes):
-        # TODO: check that the sum of probas will be 1. Now they go unchecked.
-        if n_classes > 2:
-            class_result = []
-            for i in np.arange(len(macau._classes)):
-                class_result.append(result[np.arange(i, len(result), len(macau._classes))].mean(axis = 0))
-            return np.array(class_result)
-        else:
-            result = np.array(result).mean(axis = 0)
-            return np.array([np.nan_to_num(result[0] / np.abs(result[0]).sum(axis = 1).reshape(-1, 1)),
-                             np.nan_to_num(result[1] / np.abs(result[1]).sum(axis = 1).reshape(-1, 1))])
-            
     def _combine_novelty_explanations(self, result, n_classes):
         if n_classes > 2:
             class_result = []
@@ -486,10 +476,7 @@ class MACAU:
             jobs = (delayed(self._novelty_contributions)(self._df_to_ndarray(X), leaves[:, estimator_idx], self._estimators[estimator_idx], threshold = threshold) for estimator_idx in range(leaves.shape[1]))
         
         result = Parallel(n_jobs = n_jobs, backend = 'threading', verbose=np.clip(verbose - 1, 0, 50))(jobs)
-        if shap_values == True:
-            result = self._combine_novelty_shap_explanations(np.array(result), len(self._classes))
-        else:
-            result = self._combine_novelty_explanations(np.array(result), len(self._classes))
+        result = self._combine_novelty_explanations(np.array(result), len(self._classes))
         
         if isinstance(X, pandas.DataFrame):
             if len(result.shape) < 4:
