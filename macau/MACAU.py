@@ -10,6 +10,7 @@ from joblib import Parallel, delayed
 import lightgbm
 from macau.model.linear_model import DummyClassifierCI, DummyRegressorCI, DeltaLogisticRegression
 from macau.novelty.noveltydetector import NoveltyDetector, InferenceNoveltyDetector
+from macau.novelty.shapleycelldetector import ShapleyCellDetector
 
 import numpy as np
 import scipy
@@ -298,7 +299,7 @@ class MACAU:
         
         return [predictions, inference_novelty, novelty, conditional_novelty, uncertainty, n_samples]
 
-    def _explain(self, X, leaves, estimators):
+    def _novelty_shap(self, X, leaves, estimators):
         novelty_contributions = np.zeros(X.shape)
         conditional_novelty_contributions = np.zeros(X.shape)
         for unique_leaf in np.unique(leaves):
@@ -309,20 +310,44 @@ class MACAU:
             """
             x = estimators[unique_leaf]['novelty_estimator']._pipeline[1].transform(estimators[unique_leaf]['novelty_estimator']._pipeline[0].transform(X[matches]))
             novelty_cov = estimators[unique_leaf]['novelty_estimator']._pipeline[-1]
-            novelty_fc = (np.dot(x - novelty_cov.location_, novelty_cov.precision_.T))*(x - novelty_cov.location_)
+            
+            novelty_fc = ShapleyCellDetector(novelty_cov).novelty_contributions(x)
             novelty_fc /= np.sum(np.abs(novelty_fc), axis = 1).reshape(-1, 1)
             novelty_contributions[np.nonzero(matches)[0]] = np.nan_to_num(novelty_fc)
             
             x = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[1].transform(estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[0].transform(X[matches][:, estimators[unique_leaf]['active_features']]))
-            
             cnovelty_cov = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[-1]
-            cnovelty_fc = (np.dot(x - cnovelty_cov.location_, cnovelty_cov.precision_.T))*(x - cnovelty_cov.location_)
+            cnovelty_fc = ShapleyCellDetector(cnovelty_cov).novelty_contributions(x)
             cnovelty_fc /= np.sum(np.abs(cnovelty_fc), axis = 1).reshape(-1, 1)
+            
             conditional_novelty_contributions[np.nonzero(matches)[0][:, np.newaxis], estimators[unique_leaf]['active_features']] = np.nan_to_num(cnovelty_fc)
             
         return novelty_contributions, conditional_novelty_contributions
     
-    def _combine_explanations(self, result, n_classes):
+    def _novelty_contributions(self, X, leaves, estimators, threshold = 0.95):
+        novelty_contributions = np.zeros(X.shape)
+        conditional_novelty_contributions = np.zeros(X.shape)
+        for unique_leaf in np.unique(leaves):
+            matches = leaves == unique_leaf
+            
+            """
+            Feature contributions to novelty is based on https://arxiv.org/abs/2210.10063
+            """
+            x = estimators[unique_leaf]['novelty_estimator']._pipeline[1].transform(estimators[unique_leaf]['novelty_estimator']._pipeline[0].transform(X[matches]))
+            novelty_cov = estimators[unique_leaf]['novelty_estimator']._pipeline[-1]
+            novelty_fc = ShapleyCellDetector(novelty_cov).shapley_cell_detector(x, threshold = threshold)
+            #novelty_fc = (~np.isclose(novelty_fc, 0)).astype(float)
+            novelty_contributions[np.nonzero(matches)[0]] = np.nan_to_num(novelty_fc)
+            
+            x = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[1].transform(estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[0].transform(X[matches][:, estimators[unique_leaf]['active_features']]))
+            cnovelty_cov = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[-1]
+            cnovelty_fc = ShapleyCellDetector(cnovelty_cov).shapley_cell_detector(x, threshold = threshold)
+            #cnovelty_fc = np.isclose(cnovelty_fc, 0).astype(float)
+            conditional_novelty_contributions[np.nonzero(matches)[0][:, np.newaxis], estimators[unique_leaf]['active_features']] = np.nan_to_num(cnovelty_fc)
+            
+        return novelty_contributions, conditional_novelty_contributions
+    
+    def _combine_novelty_shap_explanations(self, result, n_classes):
         # TODO: check that the sum of probas will be 1. Now they go unchecked.
         if n_classes > 2:
             class_result = []
@@ -331,9 +356,20 @@ class MACAU:
             return np.array(class_result)
         else:
             result = np.array(result).mean(axis = 0)
-            
             return np.array([np.nan_to_num(result[0] / np.abs(result[0]).sum(axis = 1).reshape(-1, 1)),
                              np.nan_to_num(result[1] / np.abs(result[1]).sum(axis = 1).reshape(-1, 1))])
+            
+    def _combine_novelty_explanations(self, result, n_classes):
+        if n_classes > 2:
+            class_result = []
+            for i in np.arange(len(macau._classes)):
+                class_result.append(result[np.arange(i, len(result), len(macau._classes))].mean(axis = 0))
+            return np.array(class_result)
+        else:
+            result = np.array(result).mean(axis = 0)
+            return np.array([np.nan_to_num(result[0]),
+                             np.nan_to_num(result[1])])
+        
     def _combine_estimations(self, data, n_classes, n_samples):
         """
         Combine the results from each tree into a single combined result.
@@ -406,27 +442,32 @@ class MACAU:
             # Stack the computed results
             return np.vstack([means, inference_novelty_stds, novelty_stds, conditional_novelty_stds, aleatoric_uncertainty, epistemic_uncertainty, aleatoric_uncertainty + epistemic_uncertainty]).T
         
-    def explain(self, X, n_jobs=1, verbose=0):
+    def novelty_explanations(self, X, shap_values = True, threshold = 0.95, n_jobs=1, verbose=0):
         """
-        Explains feature contributions in pct of novelty and conditional novelty.
+        
+        Explains either shap value ratios of novelty and conditional novelty,
+        or explains the novelties based on required difference to remove novelty.
     
         Parameters:
             X: Input samples to be explained.
+            shap_values: Whether to return shap values or suggested changes. Default is shap.
+            threshold: Probability threshold when a sample is considered novel. Default is 0.95.
             n_jobs (int): Number of parallel jobs to run. Default is 1.
             verbose (int): Verbosity level. Default is 0.
     
         Returns:
-            numpy.ndarray or list or pandas.DataFrame:
-                - If the input is a numpy array and the problem is regression or binary classification,
-                  it returns a numpy array of shape (2, n_samples, n_features) containing novelty and conditional novelty feature contributions.
-                - If the input is a pandas DataFrame and the problem is regression or binary classification,
-                  it returns a list [DataFrame(n_samples, n_features), DataFrame(n_samples, n_features)] containing novelty and conditional novelty feature contributions.
-                - If the input is a numpy array and the problem is multi-class classification,
-                  it returns a numpy array of shape (2, n_classes, n_samples, n_features) containing novelty and conditional novelty feature contributions
-                  for each class separately.
-                - If the input is a pandas DataFrame and the problem is multi-class classification,
-                  it returns a list (DataFrame(n_classes, n_samples, n_features), DataFrame(n_classes, n_samples, n_features))  containing novelty and conditional novelty feature contributions
-                  for each class separately.
+            if shap_values == True do the following:
+                numpy.ndarray or list or pandas.DataFrame:
+                    - If the input is a numpy array and the problem is regression or binary classification,
+                      it returns a numpy array of shape (2, n_samples, n_features) containing novelty and conditional novelty feature contributions.
+                    - If the input is a pandas DataFrame and the problem is regression or binary classification,
+                      it returns a list [DataFrame(n_samples, n_features), DataFrame(n_samples, n_features)] containing novelty and conditional novelty feature contributions.
+                    - If the input is a numpy array and the problem is multi-class classification,
+                      it returns a numpy array of shape (2, n_classes, n_samples, n_features) containing novelty and conditional novelty feature contributions
+                      for each class separately.
+                    - If the input is a pandas DataFrame and the problem is multi-class classification,
+                      it returns a list (DataFrame(n_classes, n_samples, n_features), DataFrame(n_classes, n_samples, n_features))  containing novelty and conditional novelty feature contributions
+                      for each class separately.
         """
         
         if verbose > 1:
@@ -439,10 +480,16 @@ class MACAU:
         if len(leaves.shape) == 1:
             leaves = leaves.reshape(-1, 1)
     
-        jobs = (delayed(self._explain)(self._df_to_ndarray(X), leaves[:, estimator_idx], self._estimators[estimator_idx]) for estimator_idx in range(leaves.shape[1]))
-        result = Parallel(n_jobs = n_jobs, backend = 'threading', verbose=np.clip(verbose - 1, 0, 50))(jobs)
+        if shap_values:
+            jobs = (delayed(self._novelty_shap)(self._df_to_ndarray(X), leaves[:, estimator_idx], self._estimators[estimator_idx]) for estimator_idx in range(leaves.shape[1]))
+        else:
+            jobs = (delayed(self._novelty_contributions)(self._df_to_ndarray(X), leaves[:, estimator_idx], self._estimators[estimator_idx], threshold = threshold) for estimator_idx in range(leaves.shape[1]))
         
-        result = self._combine_explanations(np.array(result), len(self._classes))
+        result = Parallel(n_jobs = n_jobs, backend = 'threading', verbose=np.clip(verbose - 1, 0, 50))(jobs)
+        if shap_values == True:
+            result = self._combine_novelty_shap_explanations(np.array(result), len(self._classes))
+        else:
+            result = self._combine_novelty_explanations(np.array(result), len(self._classes))
         
         if isinstance(X, pandas.DataFrame):
             if len(result.shape) < 4:
@@ -465,14 +512,13 @@ class MACAU:
                     conditional_novelty_results.append(result[i][1])
                 return np.array([novelty_results, conditional_novelty_results])
     
-    def predict(self, X, n_jobs=1, verbose=0):
+    def predict(self, X, n_jobs=1):
         """
         Predict the output for the given input samples.
     
         Parameters:
             X: Input samples to be predicted.
             n_jobs (int): Number of parallel jobs to run. Default is 1.
-            verbose (int): Verbosity level. Default is 0.
     
         Returns:
             numpy.ndarray or list or pandas.DataFrame:
@@ -496,9 +542,6 @@ class MACAU:
             - The verbosity level controls the amount of logging information displayed during prediction.
         """
         
-        if verbose > 1:
-            verbose = 51
-    
         if n_jobs <= 0:
             n_jobs = os.cpu_count()
  
@@ -507,7 +550,7 @@ class MACAU:
             leaves = leaves.reshape(-1, 1)
     
         jobs = (delayed(self._predict)(self._df_to_ndarray(X), leaves[:, estimator_idx], self._estimators[estimator_idx]) for estimator_idx in range(leaves.shape[1]))
-        result = Parallel(n_jobs=n_jobs, backend='threading', verbose=np.clip(verbose - 1, 0, 50))(jobs)
+        result = Parallel(n_jobs=n_jobs, backend='threading')(jobs)
         result = np.array(result).T
         result = self._combine_estimations(result[:, :-1], n_classes=len(self._classes), n_samples=result[:, -1])
     
@@ -520,7 +563,7 @@ class MACAU:
         return result
 
 
-    def fit(self, X, Y, n_jobs=-1, verbose=0):
+    def fit(self, X, Y, n_jobs=-1):
         """
         Fits the MACAU model to the provided training data.
     
@@ -536,10 +579,6 @@ class MACAU:
             The number of parallel jobs to use for fitting estimators. 
             Set to -1 to use all available CPU cores (default).
     
-        verbose : int, optional
-            Verbosity level. Set to 0 for no output, 1 to show progress bar, 
-            and 2 to show detailed logging.
-    
         Returns:
         --------
         self : object
@@ -553,11 +592,7 @@ class MACAU:
         - The training progress can be visualized using the progress bar if verbose is set to 1.
     
         """
-        if verbose > 1:
-            verbose = 51
-    
-        pbar = tqdm(total=2, desc='Predicting leaves', disable=verbose < 1)
-    
+        
         self._estimators = []
         self._classes = [0]
     
@@ -567,8 +602,5 @@ class MACAU:
         if self.is_classifier:
             self._classes = np.unique(Y)
     
-        pbar.update(1)
-        pbar.set_description('Fitting estimators')
-        self._fit(X, Y, leaves, n_jobs, verbose)
-        pbar.update(1)
+        self._fit(X, Y, leaves, n_jobs)
         return self
