@@ -1,5 +1,5 @@
 # MACAU
-The MACAU Python package takes pre-fitted LightGBM classifiers/regressors as input and extends its capabilities during inference. Beyond providing probabilities or regressed values, MACAU offers the following outputs:
+The MACAU [1] Python package takes pre-fitted LightGBM classifiers/regressors as input and extends its capabilities during inference. Beyond providing probabilities or regressed values, MACAU offers the following outputs:
 
 - Prediction: The predicted probability or regressed value.
 - Inference Novelty: Indicates how unusual the predicted value is, expressed as a z-score.
@@ -11,6 +11,8 @@ The MACAU Python package takes pre-fitted LightGBM classifiers/regressors as inp
 - Aleatoric Uncertainty: Provides 1-sigma confidence intervals based on the aleatoric uncertainty of the predicted sample.
 - Epistemic Uncertainty: Supplies 1-sigma confidence intervals based on the epistemic uncertainty of the predicted sample.
 - Uncertainty: Encompasses both aleatoric and epistemic uncertainty, providing a comprehensive measure.
+
+[1] https://aircconline.com/csit/papers/vol13/csit131920.pdf
 
 ## Install
 <pre>
