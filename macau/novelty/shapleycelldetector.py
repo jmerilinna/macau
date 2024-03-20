@@ -19,7 +19,7 @@ class ShapleyCellDetector:
         """
         Calculates Shapley novelty values for each feature.
         """
-        return (np.dot((X - self._location), self._precision) * (X - self._location))
+        return ((X - self._location) @ self._precision) * (X - self._location)
 
     def shapley_cell_detector(self, X, d=0.1, features_to_vary=None, threshold=0.95):
         """
