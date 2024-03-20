@@ -13,13 +13,13 @@ class ShapleyCellDetector:
     def __init__(self, cov):
         self._cov = cov
         self._location = cov.location_
-        self._precision_T = cov.precision_.T
+        self._precision = cov.precision_
 
     def novelty_contributions(self, X):
         """
         Calculates Shapley novelty values for each feature.
         """
-        return np.dot((X - self._location), self._precision_T) * (X - self._location)
+        return (np.dot((X - self._location), self._precision) * (X - self._location))
 
     def shapley_cell_detector(self, X, d=0.1, features_to_vary=None, threshold=0.95):
         """
