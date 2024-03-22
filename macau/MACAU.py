@@ -338,13 +338,17 @@ class MACAU:
             Feature contributions to novelty is based on https://arxiv.org/abs/2210.10063
             """
             x = estimators[unique_leaf]['novelty_estimator']._pipeline[1].transform(estimators[unique_leaf]['novelty_estimator']._pipeline[0].transform(X[matches]))
+            scaler = estimators[unique_leaf]['novelty_estimator']._pipeline[1]
             novelty_cov = estimators[unique_leaf]['novelty_estimator']._pipeline[-1]
             novelty_fc = ShapleyCellDetector(novelty_cov).shapley_cell_detector(x, threshold = threshold)
+            novelty_fc = scaler.inverse_transform(novelty_fc) - scaler.inverse_transform([novelty_cov.location_])
             novelty_contributions[np.nonzero(matches)[0]] = np.nan_to_num(novelty_fc)
             
             x = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[1].transform(estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[0].transform(X[matches][:, estimators[unique_leaf]['active_features']]))
+            scaler = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[1]
             cnovelty_cov = estimators[unique_leaf]['conditional_novelty_estimator']._pipeline[-1]
             cnovelty_fc = ShapleyCellDetector(cnovelty_cov).shapley_cell_detector(x, threshold = threshold)
+            cnovelty_fc = scaler.inverse_transform(cnovelty_fc) - scaler.inverse_transform([cnovelty_cov.location_])
             conditional_novelty_contributions[np.nonzero(matches)[0][:, np.newaxis], estimators[unique_leaf]['active_features']] = np.nan_to_num(cnovelty_fc)
             
         return novelty_contributions, conditional_novelty_contributions
