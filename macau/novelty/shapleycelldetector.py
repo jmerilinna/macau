@@ -39,8 +39,5 @@ class ShapleyCellDetector:
             
             for i in np.arange(len(remaining_rows)):
                 j = features_to_vary[np.argmax(contrib[i, features_to_vary])]
-                if not np.isclose(contrib[i, j], 0):
-                    X_hat[remaining_rows[i], j] -= d * (X_hat[remaining_rows[i], j] - self._location[j])
-                else:
-                    remaining_rows = remaining_rows[remaining_rows != remaining_rows[i]]
+                X_hat[remaining_rows[i], j] -= d * (X_hat[remaining_rows[i], j] - self._location[j])
         return X - X_hat
